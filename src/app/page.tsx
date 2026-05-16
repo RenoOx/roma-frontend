@@ -15,7 +15,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   // ID único de esta conversación — se genera una sola vez
   const [conversationId] = useState(
-    () => `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    () => `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
   // Estado de carga mientras Roma responde
   const [loading, setLoading] = useState(false);
@@ -32,11 +32,14 @@ export default function Home() {
 
     try {
       // Llamamos al backend
-      const response = await fetch("https://proyecto-roma-production.up.railway.app/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, conversationId }),
-      });
+      const response = await fetch(
+        "https://proyecto-roma-production.up.railway.app",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: input, conversationId }),
+        },
+      );
 
       const data = await response.json();
 

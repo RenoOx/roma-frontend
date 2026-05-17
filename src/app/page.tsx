@@ -1,7 +1,5 @@
 "use client";
-
-import { useState } from "react";
-
+import { useState, useEffect } from "react";
 // Tipo que define la estructura de un mensaje
 type Message = {
   role: "user" | "assistant";
@@ -14,9 +12,16 @@ export default function Home() {
   // Texto del input
   const [input, setInput] = useState("");
   // ID único de esta conversación — se genera una sola vez
-  const [conversationId] = useState(
-    () => `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+  const [conversationId] = useState(() => {
+    // Si ya existe un ID guardado, lo usamos
+    const saved = localStorage.getItem("conversationId");
+    if (saved) return saved;
+
+    // Si no, creamos uno nuevo y lo guardamos
+    const newId = `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem("conversationId", newId);
+    return newId;
+  });
   // Estado de carga mientras Roma responde
   const [loading, setLoading] = useState(false);
 
@@ -56,6 +61,27 @@ export default function Home() {
     }
   };
 
+  // Carga el historial al abrir la página
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(
+          `https://proyecto-roma-production.up.railway.app/conversations/${conversationId}/messages`,
+        );
+        const data = await response.json();
+        setMessages(
+          data.messages.map((msg: any) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        );
+      } catch (error) {
+        console.error("Error cargando historial:", error);
+      }
+    };
+
+    loadHistory();
+  }, [conversationId]);
   return (
     <main className="flex flex-col h-screen max-w-2xl mx-auto p-4">
       {/* Área de mensajes */}

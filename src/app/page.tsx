@@ -13,11 +13,11 @@ export default function Home() {
   const [input, setInput] = useState("");
   // ID único de esta conversación — se genera una sola vez
   const [conversationId] = useState(() => {
-    // Si ya existe un ID guardado, lo usamos
+    if (typeof window === "undefined") return "";
+
     const saved = localStorage.getItem("conversationId");
     if (saved) return saved;
 
-    // Si no, creamos uno nuevo y lo guardamos
     const newId = `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     localStorage.setItem("conversationId", newId);
     return newId;

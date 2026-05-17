@@ -33,7 +33,7 @@ export default function Home() {
     try {
       // Llamamos al backend
       const response = await fetch(
-        "https://proyecto-roma-production.up.railway.app",
+        "https://proyecto-roma-production.up.railway.app/chat",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

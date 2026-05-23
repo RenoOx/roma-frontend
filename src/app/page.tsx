@@ -1,134 +1,645 @@
 "use client";
-import { useState, useEffect } from "react";
-// Tipo que define la estructura de un mensaje
-type Message = {
-  role: "user" | "assistant";
-  content: string;
+
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+
+// Thought fragments - full screen distribution with opacity based on size
+const thoughts = [
+  { text: "No puedo más", x: 15, y: 12, rotation: -8, size: "text-3xl", opacity: 1 },
+  { text: "¿Por qué me siento así?", x: 72, y: 18, rotation: 5, size: "text-sm", opacity: 0.4 },
+  { text: "Nadie me entiende", x: 25, y: 35, rotation: -3, size: "text-2xl", opacity: 0.85 },
+  { text: "Estoy agotad@", x: 68, y: 42, rotation: 6, size: "text-xl", opacity: 0.7 },
+  { text: "Todo me supera", x: 12, y: 55, rotation: -10, size: "text-3xl", opacity: 1 },
+  { text: "Me siento sol@", x: 78, y: 28, rotation: 4, size: "text-base", opacity: 0.5 },
+  { text: "No sé qué hacer", x: 45, y: 68, rotation: -6, size: "text-sm", opacity: 0.4 },
+  { text: "Necesito ayuda", x: 55, y: 15, rotation: 8, size: "text-2xl", opacity: 0.85 },
+  { text: "¿Esto es normal?", x: 18, y: 78, rotation: -4, size: "text-lg", opacity: 0.6 },
+  { text: "No quiero molestar", x: 82, y: 58, rotation: 7, size: "text-sm", opacity: 0.4 },
+  { text: "Estoy perdid@", x: 38, y: 45, rotation: -9, size: "text-xl", opacity: 0.7 },
+  { text: "Me cuesta respirar", x: 62, y: 72, rotation: 3, size: "text-3xl", opacity: 1 },
+  { text: "No tengo fuerzas", x: 28, y: 25, rotation: -5, size: "text-base", opacity: 0.5 },
+  { text: "¿Qué me pasa?", x: 75, y: 82, rotation: 6, size: "text-lg", opacity: 0.6 },
+];
+
+// Rotating phrases for left column tagline
+const taglinePhrases = [
+  "escucharte en todo momento",
+  "apoyarte a crecer",
+  "acompañarte en lo difícil",
+  "celebrar tus logros",
+  "ayudarte a encontrar tu camino",
+];
+
+// Rotating phrases for speech bubble
+const speechPhrases = [
+  "Aquí estoy para ti",
+  "Cuéntame todo",
+  "No estás sol@",
+  "Vamos juntos",
+  "Te escucho",
+];
+
+// Chat simulation messages for Section 2
+const chatMessages = [
+  { role: "roma", text: "Hola, soy Roma. ¿Y tú quién eres?" },
+  { role: "user", text: "Me siento solo, nadie me habla" },
+  { role: "roma", text: "Lamento eso. A veces la vida nos muestra quién realmente se queda. ¿Podrías escribirle a alguien sin ningún motivo, solo para saber cómo está?" },
+  { role: "user", text: "Podría, pero siento que si llamo yo primero es como admitir que me importa más" },
+  { role: "roma", text: "Y tu amigo probablemente piensa lo mismo — entonces ninguno actúa. Es un bucle donde nadie toma acción. ¡Vamos, puedes hacerlo!" },
+  { role: "user", text: "Tienes razón... le voy a escribir" },
+  { role: "roma", text: "Eso es. Una acción pequeña puede cambiar todo. Cuéntame cómo te fue 🤍" },
+];
+
+// Animation timing constants (in seconds)
+const TIMING = {
+  thoughtStagger: 0.3,      // 0.3s between each word
+  thoughtsComplete: 4.2,    // 14 × 0.3s = when all words visible
+  shakeDuration: 1,         // 1s shake phase
+  romaAppear: 5.2,          // after shake ends (4.2 + 1)
+  layoutTransition: 7,      // transition to two-column
+  contentAppear: 8,         // title, tagline, CTA appear
+  speechBubble: 8.5,        // speech bubble appears
+  phraseInterval: 3,        // 3s per phrase rotation
+  fadeOut: 24,              // start fading out
+  loopRestart: 26,          // loop restarts
 };
 
-export default function Home() {
-  // Lista de mensajes en pantalla
-  const [messages, setMessages] = useState<Message[]>([]);
-  // Texto del input
-  const [input, setInput] = useState("");
-  // ID único de esta conversación — se genera una sola vez
-  const [conversationId] = useState(() => {
-    if (typeof window === "undefined") return "";
+// Color interpolation helper
+function interpolateColor(color1: string, color2: string, progress: number): string {
+  const hex1 = color1.replace("#", "");
+  const hex2 = color2.replace("#", "");
 
-    const saved = localStorage.getItem("conversationId");
-    if (saved) return saved;
+  const r1 = parseInt(hex1.substring(0, 2), 16);
+  const g1 = parseInt(hex1.substring(2, 4), 16);
+  const b1 = parseInt(hex1.substring(4, 6), 16);
 
-    const newId = `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem("conversationId", newId);
-    return newId;
-  });
-  // Estado de carga mientras Roma responde
-  const [loading, setLoading] = useState(false);
+  const r2 = parseInt(hex2.substring(0, 2), 16);
+  const g2 = parseInt(hex2.substring(2, 4), 16);
+  const b2 = parseInt(hex2.substring(4, 6), 16);
 
-  const sendMessage = async () => {
-    // No enviamos si está vacío o cargando
-    if (!input.trim() || loading) return;
+  const r = Math.round(r1 + (r2 - r1) * progress);
+  const g = Math.round(g1 + (g2 - g1) * progress);
+  const b = Math.round(b1 + (b2 - b1) * progress);
 
-    // Agregamos el mensaje del usuario a la pantalla
-    const userMessage: Message = { role: "user", content: input };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
-    try {
-      // Llamamos al backend
-      const response = await fetch(
-        "https://proyecto-roma-production.up.railway.app/chat",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: input, conversationId }),
-        },
-      );
-
-      const data = await response.json();
-
-      // Agregamos la respuesta de Roma a la pantalla
-      const romaMessage: Message = {
-        role: "assistant",
-        content: data.reply,
-      };
-      setMessages((prev) => [...prev, romaMessage]);
-    } catch (error) {
-      console.error("Error:", error);
-    } finally {
-      setLoading(false);
-    }
+function ThoughtFragment({
+  text,
+  x,
+  y,
+  rotation,
+  index,
+  phase,
+  size,
+  opacity,
+}: {
+  text: string;
+  x: number;
+  y: number;
+  rotation: number;
+  index: number;
+  phase: "entering" | "shake" | "falling" | "hidden";
+  size: string;
+  opacity: number;
+}) {
+  const variants = {
+    hidden: {
+      opacity: 0,
+      scale: 0.7,
+      y: 10,
+    },
+    entering: {
+      opacity: opacity,
+      scale: 1,
+      y: 0,
+      transition: {
+        duration: 0.5,
+        ease: "easeOut" as const,
+        delay: index * TIMING.thoughtStagger,
+      },
+    },
+    shake: {
+      opacity: [opacity, opacity * 0.7, opacity, opacity * 0.85, opacity],
+      scale: [1, 1.02 + index * 0.005, 0.98, 1.01, 1],
+      x: [0, -3 - index % 3, 4 + index % 2, -2, 3, -1, 0],
+      y: [0, 2 + index % 2, -3, 4 - index % 3, -2, 1, 0],
+      rotate: [0, -2 - index % 2, 1.5, -1, 2 + index % 3, 0],
+      transition: {
+        duration: 0.8 + (index % 3) * 0.15,
+        repeat: Infinity,
+        ease: "easeInOut" as const,
+        times: [0, 0.15, 0.35, 0.5, 0.7, 0.85, 1],
+      },
+    },
+    falling: {
+      opacity: 0,
+      y: 800,
+      scale: 0.8,
+      rotate: 15 + index * 3,
+      transition: {
+        duration: 0.6 + index * 0.04,
+        ease: [0.55, 0.055, 0.675, 0.19] as const,
+        delay: index * 0.02,
+      },
+    },
   };
 
-  // Carga el historial al abrir la página
+  return (
+    <motion.span
+      className={`absolute ${size} font-normal select-none pointer-events-none`}
+      style={{
+        left: `${x}%`,
+        top: `${y}%`,
+        color: "#FAF0E6",
+        transform: `rotate(${rotation}deg)`,
+        textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+      }}
+      variants={variants}
+      initial="hidden"
+      animate={phase}
+    >
+      {text}
+    </motion.span>
+  );
+}
+
+// Arrow icon component
+function ArrowIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="ml-2"
+    >
+      <path
+        d="M5 12H19M19 12L12 5M19 12L12 19"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Chat bubble component for Section 2
+function ChatBubble({ role, text }: { role: string; text: string }) {
+  const isRoma = role === "roma";
+
+  return (
+    <motion.div
+      className={`flex ${isRoma ? "justify-start" : "justify-end"} mb-4`}
+      initial={{ opacity: 0, y: 30, scale: 0.9 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: false, amount: 0.5, margin: "-20px" }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+    >
+      <div
+        className="max-w-xs md:max-w-sm lg:max-w-md px-4 py-3 text-base font-normal"
+        style={{
+          backgroundColor: isRoma ? "#FFFFFF" : "#E8A0AC",
+          border: isRoma ? "2px solid #C4697A" : "none",
+          borderRadius: isRoma ? "18px 18px 18px 4px" : "18px 18px 4px 18px",
+          color: "#2C1A1A",
+        }}
+      >
+        {text}
+      </div>
+    </motion.div>
+  );
+}
+
+export default function Home() {
+  const [phase, setPhase] = useState<"entering" | "shake" | "falling" | "hidden">("hidden");
+  const [showRomaCenter, setShowRomaCenter] = useState(false);
+  const [showTwoColumn, setShowTwoColumn] = useState(false);
+  const [showContent, setShowContent] = useState(false);
+  const [showSpeechBubble, setShowSpeechBubble] = useState(false);
+  const [cycleKey, setCycleKey] = useState(0);
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [bgProgress, setBgProgress] = useState(0);
+
+  // Background color based on progress
+  const backgroundColor = useMemo(() => {
+    return interpolateColor("#FDF6EC", "#2C1A1A", bgProgress);
+  }, [bgProgress]);
+
+  // Background darkening effect during chaos
   useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const response = await fetch(
-          `https://proyecto-roma-production.up.railway.app/conversations/${conversationId}/messages`,
-        );
-        const data = await response.json();
-        setMessages(
-          data.messages.map((msg: any) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-        );
-      } catch (error) {
-        console.error("Error cargando historial:", error);
-      }
+    if (phase === "hidden") {
+      setBgProgress(0);
+      return;
+    }
+
+    if (phase === "entering") {
+      // Gradually darken as thoughts appear
+      const totalThoughts = thoughts.length;
+      const interval = setInterval(() => {
+        setBgProgress((prev) => {
+          const next = prev + (0.85 / totalThoughts);
+          return next > 0.85 ? 0.85 : next;
+        });
+      }, TIMING.thoughtStagger * 1000);
+
+      return () => clearInterval(interval);
+    }
+
+    if (phase === "falling") {
+      // Quickly return to light when Roma appears
+      const fadeBack = setInterval(() => {
+        setBgProgress((prev) => {
+          const next = prev - 0.15;
+          if (next <= 0) {
+            clearInterval(fadeBack);
+            return 0;
+          }
+          return next;
+        });
+      }, 50);
+
+      return () => clearInterval(fadeBack);
+    }
+  }, [phase]);
+
+  // Phrase rotation effect
+  useEffect(() => {
+    if (!showContent) {
+      setPhraseIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setPhraseIndex((prev) => (prev + 1) % taglinePhrases.length);
+    }, TIMING.phraseInterval * 1000);
+
+    return () => clearInterval(interval);
+  }, [showContent]);
+
+  useEffect(() => {
+    const runAnimation = () => {
+      // Reset everything
+      setPhase("hidden");
+      setShowRomaCenter(false);
+      setShowTwoColumn(false);
+      setShowContent(false);
+      setShowSpeechBubble(false);
+      setPhraseIndex(0);
+      setBgProgress(0);
+
+      // Phase 1: Thoughts start entering
+      setTimeout(() => setPhase("entering"), 100);
+
+      // Phase 2: All words visible, start shake
+      setTimeout(() => setPhase("shake"), TIMING.thoughtsComplete * 1000);
+
+      // Phase 3: Roma appears center, thoughts clear
+      setTimeout(() => {
+        setShowRomaCenter(true);
+        setPhase("falling");
+      }, TIMING.romaAppear * 1000);
+
+      // Phase 3.5: Transition to two-column layout
+      setTimeout(() => {
+        setShowRomaCenter(false);
+        setShowTwoColumn(true);
+      }, TIMING.layoutTransition * 1000);
+
+      // Phase 4: Content appears (title, tagline, CTA)
+      setTimeout(() => setShowContent(true), TIMING.contentAppear * 1000);
+
+      // Speech bubble appears slightly after
+      setTimeout(() => setShowSpeechBubble(true), TIMING.speechBubble * 1000);
+
+      // Fade out everything before loop
+      setTimeout(() => {
+        setShowTwoColumn(false);
+        setShowContent(false);
+        setShowSpeechBubble(false);
+      }, TIMING.fadeOut * 1000);
+
+      // Restart loop
+      setTimeout(() => {
+        setCycleKey((prev) => prev + 1);
+      }, TIMING.loopRestart * 1000);
     };
 
-    loadHistory();
-  }, [conversationId]);
+    runAnimation();
+  }, [cycleKey]);
+
   return (
-    <main className="flex flex-col h-screen max-w-2xl mx-auto p-4">
-      {/* Área de mensajes */}
-      <div className="flex-1 overflow-y-auto space-y-4 py-4">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-xs px-4 py-2 rounded-2xl text-sm ${
-                msg.role === "user"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {msg.content}
-            </div>
-          </div>
+    <>
+    {/* Sticky Header */}
+    <header
+      className="sticky top-0 z-50"
+      style={{
+        backgroundColor: "#FDF6EC",
+        padding: "0 24px",
+        height: "64px",
+        overflow: "hidden",
+      }}
+    >
+      <div className="max-w-6xl mx-auto flex items-center justify-between h-full">
+        <img src="/vamvu-logo-granate.png" alt="Vamvoo" style={{ height: "140px" }} />
+        <Link
+          href="/chat"
+          className="text-sm font-normal transition-opacity hover:opacity-90"
+          style={{
+            backgroundColor: "#6B1D2E",
+            color: "#FAF0E6",
+            padding: "8px 20px",
+            borderRadius: "20px",
+          }}
+        >
+          Hablar con Roma
+        </Link>
+      </div>
+    </header>
+
+    <motion.main
+      className="relative min-h-screen w-full overflow-hidden"
+      animate={{ backgroundColor }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* Thought fragments layer */}
+      <div className="absolute inset-0" key={cycleKey}>
+        {thoughts.map((thought, index) => (
+          <ThoughtFragment
+            key={`${cycleKey}-${index}`}
+            text={thought.text}
+            x={thought.x}
+            y={thought.y}
+            rotation={thought.rotation}
+            index={index}
+            phase={phase}
+            size={thought.size}
+            opacity={thought.opacity}
+          />
         ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 text-gray-500 px-4 py-2 rounded-2xl text-sm">
-              Roma está escribiendo...
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Input y botón */}
-      <div className="flex gap-2 pt-4 border-t">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Escríbele a Roma..."
-          className="flex-1 border rounded-full px-4 py-2 text-sm outline-none"
-        />
-        <button
-          onClick={sendMessage}
-          disabled={loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded-full text-sm disabled:opacity-50"
+      {/* Roma centered - Phase 3 */}
+      <AnimatePresence>
+        {showRomaCenter && (
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <h1
+              className="text-5xl md:text-7xl font-medium"
+              style={{ color: "#6B1D2E" }}
+            >
+              Roma
+            </h1>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Two-column layout - Phase 4 */}
+      <AnimatePresence>
+        {showTwoColumn && (
+          <motion.div
+            className="absolute inset-0 flex flex-col md:flex-row items-center justify-center px-6 md:px-16 lg:px-24"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            {/* Left column - Text content */}
+            <div className="flex-1 flex flex-col items-center md:items-start justify-center order-2 md:order-1 mt-8 md:mt-0">
+              <AnimatePresence>
+                {showContent && (
+                  <>
+                    {/* Fixed title */}
+                    <motion.h1
+                      className="text-3xl md:text-4xl lg:text-5xl font-medium text-center md:text-left"
+                      style={{ color: "#6B1D2E" }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    >
+                      La amiga para...
+                    </motion.h1>
+
+                    {/* Rotating tagline */}
+                    <motion.div
+                      className="mt-2 h-16 md:h-20 flex items-start"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.p
+                          key={phraseIndex}
+                          className="text-xl md:text-2xl lg:text-3xl font-normal text-center md:text-left"
+                          style={{ color: "#2C1A1A" }}
+                          initial={{ opacity: 0, y: 15 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -15 }}
+                          transition={{ duration: 0.4, ease: "easeOut" }}
+                        >
+                          {taglinePhrases[phraseIndex]}
+                        </motion.p>
+                      </AnimatePresence>
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+                      className="mt-6"
+                    >
+                      <Link
+                        href="/chat"
+                        className="inline-flex items-center px-8 py-3 text-base font-medium text-white rounded-full transition-opacity hover:opacity-90"
+                        style={{ backgroundColor: "#6B1D2E" }}
+                      >
+                        Comenzar
+                        <ArrowIcon />
+                      </Link>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Right column - Roma avatar */}
+            <div className="flex-1 flex items-center justify-center order-1 md:order-2 relative">
+              <motion.div
+                className="relative"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              >
+                {/* Speech bubble with rotating text */}
+                <AnimatePresence>
+                  {showSpeechBubble && (
+                    <motion.div
+                      className="absolute -top-16 -right-4 md:right-0 px-4 py-2 rounded-2xl text-sm font-normal min-w-max"
+                      style={{
+                        backgroundColor: "#FFFFFF",
+                        color: "#2C1A1A",
+                        border: "1px solid #EDD5C0",
+                      }}
+                      initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                      transition={{ duration: 0.4, ease: "easeOut" }}
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.span
+                          key={phraseIndex}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          {speechPhrases[phraseIndex]}
+                        </motion.span>
+                      </AnimatePresence>
+                      {/* Speech bubble tail */}
+                      <div
+                        className="absolute -bottom-2 left-6 w-4 h-4 rotate-45"
+                        style={{
+                          backgroundColor: "#FFFFFF",
+                          borderRight: "1px solid #EDD5C0",
+                          borderBottom: "1px solid #EDD5C0",
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Avatar placeholder */}
+                <div
+                  className="w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80 rounded-3xl flex items-center justify-center"
+                  style={{
+                    backgroundColor: "rgba(196, 105, 122, 0.1)",
+                    border: "2px solid #C4697A",
+                  }}
+                >
+                  <span
+                    className="text-4xl md:text-5xl lg:text-6xl font-medium"
+                    style={{ color: "#C4697A" }}
+                  >
+                    Roma
+                  </span>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.main>
+
+    {/* Gradient transition between Hero and Section 2 */}
+    <div
+      className="h-32 md:h-48"
+      style={{
+        background: "linear-gradient(to bottom, #FDF6EC 0%, #F5EDE3 50%, #FDF6EC 100%)",
+      }}
+    />
+
+    {/* Section 2: Chat Simulation */}
+    <section
+      className="py-20 px-6"
+      style={{ backgroundColor: "#FDF6EC" }}
+    >
+      <div className="max-w-2xl mx-auto">
+        <motion.h2
+          className="text-3xl md:text-4xl font-medium text-center mb-12"
+          style={{ color: "#6B1D2E" }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
         >
-          Enviar
-        </button>
+          Así es Roma
+        </motion.h2>
+
+        <div className="space-y-4">
+          {chatMessages.map((msg, index) => (
+            <ChatBubble key={index} role={msg.role} text={msg.text} />
+          ))}
+        </div>
       </div>
-    </main>
+    </section>
+
+    {/* Gradient transition to CTA */}
+    <div
+      className="h-24 md:h-32"
+      style={{
+        background: "linear-gradient(to bottom, #FDF6EC 0%, #F8F0E8 100%)",
+      }}
+    />
+
+    {/* CTA Section */}
+    <section
+      className="py-16 px-6 text-center"
+      style={{ backgroundColor: "#F8F0E8" }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.5 }}
+      >
+        <p
+          className="text-2xl md:text-3xl font-normal mb-8"
+          style={{ color: "#2C1A1A" }}
+        >
+          Roma está lista para escucharte
+        </p>
+        <Link
+          href="/chat"
+          className="inline-flex items-center px-8 py-4 text-lg font-medium text-white rounded-full transition-opacity hover:opacity-90"
+          style={{ backgroundColor: "#6B1D2E" }}
+        >
+          Comenzar ahora
+        </Link>
+      </motion.div>
+    </section>
+
+    {/* Footer */}
+    <footer
+      className="py-8 px-6"
+      style={{ backgroundColor: "#6B1D2E" }}
+    >
+      <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+        <span
+          className="text-sm font-normal"
+          style={{ color: "#FAF0E6" }}
+        >
+          Roma by Vamvoo labs
+        </span>
+
+        <span
+          className="text-sm font-normal"
+          style={{ color: "#FAF0E6" }}
+        >
+          Hecho con propósito
+        </span>
+
+        <Link
+          href="/chat"
+          className="text-sm font-normal transition-opacity hover:opacity-80"
+          style={{ color: "#FAF0E6" }}
+        >
+          Comenzar
+        </Link>
+      </div>
+    </footer>
+    </>
   );
 }

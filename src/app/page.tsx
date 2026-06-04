@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 
 // Thought fragments - full screen distribution with opacity based on size
@@ -328,6 +328,80 @@ function ChatBubble({ role, text }: { role: string; text: string }) {
   );
 }
 
+const radialMask = {
+  maskImage:
+    "radial-gradient(ellipse 75% 75% at center, black 50%, transparent 100%)",
+  WebkitMaskImage:
+    "radial-gradient(ellipse 75% 75% at center, black 50%, transparent 100%)",
+  mixBlendMode: "multiply" as const,
+};
+
+
+function AutoPlayVideo({
+  src,
+  className,
+  style,
+}: {
+  src: string;
+  className: string;
+  style?: React.CSSProperties;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    const tryPlay = () => { video.play().catch(() => {}); };
+    if (video.readyState >= 3) {
+      tryPlay();
+    } else {
+      video.addEventListener("canplay", tryPlay, { once: true });
+      return () => video.removeEventListener("canplay", tryPlay);
+    }
+  }, []);
+  return (
+    <video
+      ref={ref}
+      src={src}
+      className={className}
+      muted
+      playsInline
+      preload="auto"
+      style={style}
+    />
+  );
+}
+
+function ViewportVideo({ src, className }: { src: string; className: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          video.play();
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      className={className}
+      muted
+      playsInline
+      style={radialMask}
+    />
+  );
+}
+
 export default function Home() {
   const [phase, setPhase] = useState<
     "entering" | "shake" | "falling" | "hidden"
@@ -365,21 +439,8 @@ export default function Home() {
       return () => clearInterval(interval);
     }
 
-    if (phase === "falling") {
-      // Quickly return to light when Roma appears
-      const fadeBack = setInterval(() => {
-        setBgProgress((prev) => {
-          const next = prev - 0.15;
-          if (next <= 0) {
-            clearInterval(fadeBack);
-            return 0;
-          }
-          return next;
-        });
-      }, 50);
+    // bgProgress reset to 0 is handled directly in the romaAppear setTimeout
 
-      return () => clearInterval(fadeBack);
-    }
   }, [phase]);
 
   // Phrase rotation effect
@@ -413,23 +474,28 @@ export default function Home() {
       // Phase 2: All words visible, start shake
       setTimeout(() => setPhase("shake"), TIMING.thoughtsComplete * 1000);
 
-      // Phase 3: Roma appears center, thoughts clear
+      // Phase 3: thoughts clear, background starts transitioning to cream
       setTimeout(() => {
-        setShowRomaCenter(true);
         setPhase("falling");
+        setBgProgress(0);
       }, TIMING.romaAppear * 1000);
 
-      // Phase 3.5: Transition to two-column layout
+      // Phase 3 (+1s): Roma appears after background is cream
+      setTimeout(() => {
+        setShowRomaCenter(true);
+      }, (TIMING.romaAppear + 1) * 1000);
+
+      // Phase 3.5: Transition to two-column layout (+1s to preserve Roma visibility)
       setTimeout(() => {
         setShowRomaCenter(false);
         setShowTwoColumn(true);
-      }, TIMING.layoutTransition * 1000);
+      }, (TIMING.layoutTransition + 1) * 1000);
 
-      // Phase 4: Content appears (title, tagline, CTA)
-      setTimeout(() => setShowContent(true), TIMING.contentAppear * 1000);
+      // Phase 4: Content appears (+1s)
+      setTimeout(() => setShowContent(true), (TIMING.contentAppear + 1) * 1000);
 
-      // Speech bubble appears slightly after
-      setTimeout(() => setShowSpeechBubble(true), TIMING.speechBubble * 1000);
+      // Speech bubble appears slightly after (+1s)
+      setTimeout(() => setShowSpeechBubble(true), (TIMING.speechBubble + 1) * 1000);
 
       // Fade out everything before loop
       setTimeout(() => {
@@ -483,8 +549,17 @@ export default function Home() {
       <motion.main
         className="relative min-h-screen w-full overflow-hidden"
         animate={{ backgroundColor }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: phase === "falling" ? 1.0 : 0.3 }}
       >
+        {/* Preload Phase 3 video so it's ready before showRomaCenter triggers */}
+        <video
+          src="/roma-neutral-loop-wb.webm"
+          preload="auto"
+          muted
+          playsInline
+          style={{ display: "none" }}
+        />
+
         {/* Thought fragments layer */}
         <div className="absolute inset-0" key={cycleKey}>
           {thoughts.map((thought, index) => (
@@ -512,16 +587,10 @@ export default function Home() {
               exit={{ opacity: 0, scale: 1.05 }}
               transition={{ duration: 0.6, ease: "easeOut" }}
             >
-              <img
-                src="/roma-happy.png"
-                alt="Roma"
-                className="w-48 md:w-64 lg:w-72 h-auto object-contain"
-                style={{
-                  maskImage:
-                    "radial-gradient(ellipse 75% 75% at center, black 50%, transparent 100%)",
-                  WebkitMaskImage:
-                    "radial-gradient(ellipse 75% 75% at center, black 50%, transparent 100%)",
-                }}
+              <AutoPlayVideo
+                src="/roma-neutral-loop-wb.webm"
+                className="w-[500px] md:w-[680px] lg:w-[800px] h-auto object-contain"
+                style={{ filter: "drop-shadow(0 8px 32px rgba(107,29,46,0.2))" }}
               />
             </motion.div>
           )}
@@ -653,7 +722,7 @@ export default function Home() {
                   {/* Roma avatar video */}
                   <video
                     className="w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80 object-cover"
-                    src="/roma-neutral-to-happy.mp4"
+                    src="/roma-neutral-loop.mp4"
                     autoPlay
                     loop
                     muted
@@ -663,6 +732,7 @@ export default function Home() {
                         "radial-gradient(ellipse 75% 75% at center, black 50%, transparent 100%)",
                       WebkitMaskImage:
                         "radial-gradient(ellipse 75% 75% at center, black 50%, transparent 100%)",
+                      mixBlendMode: "multiply",
                     }}
                   />
                 </motion.div>
@@ -683,7 +753,7 @@ export default function Home() {
 
       {/* Section 2: Chat Simulation */}
       <section className="py-20 px-6" style={{ backgroundColor: "#FDF6EC" }}>
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <motion.h2
             className="text-3xl md:text-4xl font-medium text-center mb-12"
             style={{ color: "#6B1D2E" }}
@@ -695,10 +765,25 @@ export default function Home() {
             Así es Roma
           </motion.h2>
 
-          <div className="space-y-4">
-            {chatMessages.map((msg, index) => (
-              <ChatBubble key={index} role={msg.role} text={msg.text} />
-            ))}
+          <div className="flex flex-col md:flex-row gap-12 items-start">
+            <div className="flex-1 space-y-4">
+              {chatMessages.map((msg, index) => (
+                <ChatBubble key={index} role={msg.role} text={msg.text} />
+              ))}
+            </div>
+            <div
+              className="flex-shrink-0 flex justify-center w-full md:w-auto"
+              style={{
+                position: "sticky",
+                top: "120px",
+                alignSelf: "flex-start",
+              }}
+            >
+              <ViewportVideo
+                src="/roma-neutral-to-empathetic.mp4"
+                className="w-[280px] h-auto object-contain"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -728,6 +813,12 @@ export default function Home() {
           >
             Roma está lista para escucharte
           </p>
+          <div className="flex justify-center mb-8">
+            <ViewportVideo
+              src="/roma-empathetic-to-motivate.mp4"
+              className="w-40 md:w-52 h-auto object-contain"
+            />
+          </div>
           <Link
             href="/chat"
             className="inline-flex items-center px-8 py-4 text-lg font-medium text-white rounded-full transition-opacity hover:opacity-90"

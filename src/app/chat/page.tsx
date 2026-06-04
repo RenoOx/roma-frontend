@@ -26,17 +26,16 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const sendMessage = async () => {
-    // No enviamos si está vacío o cargando
     if (!input.trim() || loading) return;
 
-    // Agregamos el mensaje del usuario a la pantalla
     const userMessage: Message = { role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
+    const startTime = Date.now();
+
     try {
-      // Llamamos al backend
       const response = await fetch(
         "https://proyecto-roma-production.up.railway.app/chat",
         {
@@ -45,15 +44,30 @@ export default function Home() {
           body: JSON.stringify({ message: input, conversationId }),
         },
       );
-
       const data = await response.json();
+      const replies: string[] = data.replies;
 
-      // Agregamos la respuesta de Roma a la pantalla
-      const romaMessage: Message = {
-        role: "assistant",
-        content: data.reply,
-      };
-      setMessages((prev) => [...prev, romaMessage]);
+      // Esperar el delay inicial antes del primer mensaje
+      const firstDelay = Math.min(3500, 1500 + replies[0].length * 25);
+      const elapsed = Date.now() - startTime;
+      const remainingDelay = Math.max(0, firstDelay - elapsed);
+      await new Promise((resolve) => setTimeout(resolve, remainingDelay));
+
+      // Mostrar el primer mensaje
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: replies[0] },
+      ]);
+
+      // Mostrar los mensajes siguientes con un delay entre cada uno
+      for (let i = 1; i < replies.length; i++) {
+        const delay = Math.min(2500, 800 + replies[i].length * 25);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: replies[i] },
+        ]);
+      }
     } catch (error) {
       console.error("Error:", error);
     } finally {
